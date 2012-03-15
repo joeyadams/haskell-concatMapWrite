@@ -26,7 +26,9 @@ instance Monoid WB where
     mempty = WB return
     {-# INLINE mempty #-}
 
-    a `mappend` b = WB $ runWB a >=> runWB b
+    a `mappend` b = WB $ \p -> do
+        !p' <- runWB a p
+        runWB b p'
     {-# INLINE mappend #-}
 
 wb :: Word8 -> WB
@@ -53,6 +55,7 @@ concatMap' f input =
                     allocaBytes bufsize $ \wp -> do
                         we <- readLoop rp0 wp
                         B.packCStringLen (castPtr wp, we `minusPtr` wp)
+            {-# INLINE bufLoop #-}
 
             readLoop rp wp | rp >= re  = return wp
                            | otherwise = do
@@ -60,6 +63,7 @@ concatMap' f input =
                 let !rp' = rp `plusPtr` 1
                 wp' <- runWB (f b) wp
                 readLoop rp' wp'
+            {-# INLINE readLoop #-}
 
          in bufLoop (B.length input * 5)
 {-# INLINE concatMap' #-}

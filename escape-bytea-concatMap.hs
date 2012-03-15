@@ -21,6 +21,8 @@ escapeCopyBytea = concatMap' f
                 `mappend` (wb $ c2w '0' + ((c `shiftR` 6) .&. 0x7))
                 `mappend` (wb $ c2w '0' + ((c `shiftR` 3) .&. 0x7))
                 `mappend` (wb $ c2w '0' + (c .&. 0x7))
+        {-# INLINE f #-}
+{-# INLINE escapeCopyBytea #-}
 
 mapChunks :: (ByteString -> ByteString) -> L.ByteString -> L.ByteString
 mapChunks f = L.fromChunks . map f . L.toChunks
