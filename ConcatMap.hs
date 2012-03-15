@@ -1,14 +1,16 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module ConcatMap (
     WB,
     wb,
     concatMap'
 ) where
 
-import Control.Applicative
+import Control.Exception
 import Control.Monad
 import Data.ByteString      (ByteString)
 import Data.Monoid
+import Data.Typeable        (Typeable)
 import Data.Word            (Word8)
 import Foreign.Marshal.Alloc    (allocaBytes)
 import Foreign.Ptr
@@ -27,6 +29,12 @@ instance Monoid WB where
 wb :: Word8 -> WB
 wb b = WB (\p -> do {poke p b; return $! p `plusPtr` 1}) 1
 
+data GrowException = GrowException
+    deriving (Show, Typeable)
+
+instance Exception GrowException
+
+
 concatMap' :: (Word8 -> WB) -> ByteString -> ByteString
 concatMap' f input =
     unsafePerformIO $
@@ -34,23 +42,19 @@ concatMap' f input =
         let !rp0 = castPtr rbuf
             !re  = rp0 `plusPtr` max 0 rlen
 
-            bufLoop bufsize = do
-                m <- allocaBytes bufsize $ \wp -> do
-                    m <- readLoop rp0 wp (wp `plusPtr` bufsize)
-                    case m of
-                        Nothing -> return Nothing
-                        Just we -> Just <$> B.packCStringLen (castPtr wp, we `minusPtr` wp)
-                case m of
-                    Nothing -> bufLoop (bufsize * 2)
-                    Just bs -> return bs
+            bufLoop bufsize =
+                handle (\GrowException -> bufLoop (bufsize * 2)) $
+                    allocaBytes bufsize $ \wp -> do
+                        we <- readLoop rp0 wp (wp `plusPtr` bufsize)
+                        B.packCStringLen (castPtr wp, we `minusPtr` wp)
 
-            readLoop rp wp we | rp >= re  = return (Just wp)
+            readLoop rp wp we | rp >= re  = return wp
                               | otherwise = do
                 b <- peek rp
                 let !rp' = rp `plusPtr` 1
                     WB w n = f b
                 if (we `minusPtr` wp) < n
-                    then return Nothing
+                    then throwIO GrowException
                     else do
                         wp' <- w wp
                         readLoop rp' wp' we
