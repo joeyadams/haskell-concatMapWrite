@@ -7,7 +7,6 @@ module ConcatMap (
 ) where
 
 import Control.Exception
-import Control.Monad
 import Data.ByteString      (ByteString)
 import Data.Monoid
 import Data.Typeable        (Typeable)
@@ -42,6 +41,20 @@ data GrowException = GrowException
 
 instance Exception GrowException
 
+concatMapBuf :: (Word8 -> WB)
+             -> Ptr Word8
+             -> Ptr Word8
+             -> Ptr Word8
+             -> IO (Ptr Word8)
+concatMapBuf f re rp0 wp0 =
+        loop rp0 wp0
+    where
+        loop !rp !wp | rp >= re  = return wp
+                     | otherwise = do
+            b <- peek rp
+            wp' <- runWB (f b) wp
+            loop (rp `plusPtr` 1) wp'
+{-# INLINE concatMapBuf #-}
 
 concatMap' :: (Word8 -> WB) -> ByteString -> ByteString
 concatMap' f input =
@@ -53,17 +66,8 @@ concatMap' f input =
             bufLoop bufsize =
                 handle (\GrowException -> bufLoop (bufsize * 2)) $
                     allocaBytes bufsize $ \wp -> do
-                        we <- readLoop rp0 wp
-                        B.packCStringLen (castPtr wp, we `minusPtr` wp)
-            {-# INLINE bufLoop #-}
-
-            readLoop rp wp | rp >= re  = return wp
-                           | otherwise = do
-                b <- peek rp
-                let !rp' = rp `plusPtr` 1
-                wp' <- runWB (f b) wp
-                readLoop rp' wp'
-            {-# INLINE readLoop #-}
+                        wp' <- concatMapBuf f re rp0 wp
+                        B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
 
          in bufLoop (B.length input * 5)
 {-# INLINE concatMap' #-}
