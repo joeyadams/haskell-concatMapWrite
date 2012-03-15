@@ -20,25 +20,19 @@ import System.IO.Unsafe     (unsafePerformIO)
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Unsafe as U
 
-newtype WB = WB { runWB :: Ptr Word8 -> Ptr Word8 -> IO (Ptr Word8) }
+newtype WB = WB { runWB :: Ptr Word8 -> IO (Ptr Word8) }
 
 instance Monoid WB where
-    mempty = WB $ \p _ -> return p
+    mempty = WB return
     {-# INLINE mempty #-}
 
-    a `mappend` b = WB $ \p e -> do
-        p' <- runWB a p e
-        runWB b p' e
+    a `mappend` b = WB $ runWB a >=> runWB b
     {-# INLINE mappend #-}
 
 wb :: Word8 -> WB
-wb b = WB $ \p e ->
-    if p < e
-        then do
-            poke p b
-            return $! (p `plusPtr` 1)
-        else
-            throwIO GrowException
+wb b = WB $ \p -> do
+    poke p b
+    return $! (p `plusPtr` 1)
 {-# INLINE wb #-}
 
 data GrowException = GrowException
@@ -57,15 +51,15 @@ concatMap' f input =
             bufLoop bufsize =
                 handle (\GrowException -> bufLoop (bufsize * 2)) $
                     allocaBytes bufsize $ \wp -> do
-                        we <- readLoop rp0 wp (wp `plusPtr` bufsize)
+                        we <- readLoop rp0 wp
                         B.packCStringLen (castPtr wp, we `minusPtr` wp)
 
-            readLoop rp wp we | rp >= re  = return wp
-                              | otherwise = do
+            readLoop rp wp | rp >= re  = return wp
+                           | otherwise = do
                 b <- peek rp
                 let !rp' = rp `plusPtr` 1
-                wp' <- runWB (f b) wp we
-                readLoop rp' wp' we
+                wp' <- runWB (f b) wp
+                readLoop rp' wp'
 
-         in bufLoop (B.length input * 2)
+         in bufLoop (B.length input * 5)
 {-# INLINE concatMap' #-}
