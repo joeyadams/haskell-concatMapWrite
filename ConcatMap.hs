@@ -48,7 +48,7 @@ type Convert = Ptr Word8
             -> IO (Ptr Word8, Ptr Word8)
 
 concatMapBuf :: (Word8 -> WB) -> Convert
-concatMapBuf f = \re rp0 wp0 ->
+concatMapBuf f re rp0 wp0 =
     let loop !rp !wp | rp >= re  = return (rp, wp)
                      | otherwise = do
             b <- peek rp
