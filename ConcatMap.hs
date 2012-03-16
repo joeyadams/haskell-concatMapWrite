@@ -71,11 +71,11 @@ runConvert conv input =
             !re  = rp0 `plusPtr` max 0 rlen
 
             bufLoop bufsize =
-                allocaBytes bufsize $ \wp -> do
+                join $ allocaBytes bufsize $ \wp -> do
                     m <- conv re (wp `plusPtr` bufsize) rp0 wp
                     case m of
-                        Nothing  -> error "runConvert"
-                        Just wp' -> B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
+                        Nothing  -> return $ bufLoop (bufsize * 2)
+                        Just wp' -> return $ B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
 
          in bufLoop (B.length input * 5)
 {-# INLINE runConvert #-}
