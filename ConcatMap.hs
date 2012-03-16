@@ -6,22 +6,21 @@ module ConcatMap (
     concatMap'
 ) where
 
-import Control.Exception
 import Control.Monad
-import Data.ByteString      (ByteString)
+import Data.ByteString          (ByteString)
 import Data.Monoid
-import Data.Typeable        (Typeable)
-import Data.Word            (Word8)
+import Data.Word                (Word8)
+import Data.Typeable            (Typeable)
 import Foreign.Marshal.Alloc    (allocaBytes)
 import Foreign.Ptr
 import Foreign.Storable
-import System.IO
-import System.IO.Unsafe     (unsafePerformIO)
+import System.IO.Unsafe         (unsafePerformIO)
 
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Unsafe as U
 
 newtype WB = WB { runWB :: Ptr Word8 -> Ptr Word8 -> IO (Maybe (Ptr Word8)) }
+    deriving Typeable
 
 instance Monoid WB where
     mempty = WB $ \_we wp -> return $ Just wp
@@ -79,9 +78,7 @@ runConvert conv input =
                 join $ allocaBytes bufsize $ \wp -> do
                     m <- conv re (wp `plusPtr` bufsize) rp0 wp
                     case m of
-                        Nothing  -> return $ do
-                            hPutStrLn stderr "Realloc"
-                            bufLoop (bufsize * 2)
+                        Nothing  -> return $ bufLoop (bufsize * 2)
                         Just wp' -> return $ B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
 
          in bufLoop (B.length input * 2)
