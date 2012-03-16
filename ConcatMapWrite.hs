@@ -9,13 +9,14 @@ import Blaze.ByteString.Builder.Internal
 import Control.Monad
 import Data.ByteString          (ByteString)
 import Data.Word                (Word8)
-import Foreign.Marshal.Alloc    (allocaBytes)
+import Foreign.ForeignPtr
 import Foreign.Ptr
 import Foreign.Storable
 import System.IO.Unsafe         (unsafePerformIO)
 
-import qualified Data.ByteString        as B
-import qualified Data.ByteString.Unsafe as U
+import qualified Data.ByteString          as B
+import qualified Data.ByteString.Internal as I
+import qualified Data.ByteString.Unsafe   as U
 
 -- | Like 'B.concatMap', but have the function return a 'Write' containing the
 -- generated output.  This can be used to write efficient escaping code.
@@ -39,24 +40,39 @@ type Convert = Ptr Word8    -- ^ End of input buffer
             -> IO (Ptr Word8, Ptr Word8)
 
 -- | Run a Convert computation on a ByteString.  This allocates a buffer, runs
--- the computation, and if the buffer is too small, tries again with a buffer
--- twice as big.
+-- the computation, and if the buffer is too small, expands it and continues at
+-- the position where it left off.
 runConvert :: Convert -> ByteString -> ByteString
 runConvert conv input =
     unsafePerformIO $
-    U.unsafeUseAsCStringLen input $ \(rbuf, rlen) ->
-        let !rp = castPtr rbuf
-            !re = rp `plusPtr` max 0 rlen
+    U.unsafeUseAsCStringLen input $ \(rbuf, rlen) -> do
+        -- rs: Start of read buffer
+        -- re: End of read buffer
+        let rs = castPtr rbuf
+            re = rs `plusPtr` rlen
 
-            bufLoop bufsize =
-                join $ allocaBytes bufsize $ \wp -> do
-                    let !we = wp `plusPtr` bufsize
-                    (rp', wp') <- conv re we rp wp
-                    if rp' < re
-                        then return $ bufLoop (bufsize * 2)
-                        else return $ B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
+            -- rp:      Current position in read buffer
+            -- wi:      Current index in write buffer
+            --          (number of bytes written by all previous iterations)
+            -- fbuf:    Foreign pointer of write buffer
+            -- bufsize: Size of write buffer
+            loop rp wi fbuf bufsize =
+                join $ withForeignPtr fbuf $ \ws -> do
+                    (rp', wp') <- conv re (ws `plusPtr` bufsize)
+                                       rp (ws `plusPtr` wi)
+                    let wi' = wp' `minusPtr` ws
+                    if rp' >= re
+                        then return $ return $ I.fromForeignPtr fbuf 0 wi'
+                        else do
+                            let bufsize' = bufsize * 2
+                            fbuf' <- I.mallocByteString bufsize'
+                            withForeignPtr fbuf' $ \ws' -> do
+                                I.memcpy ws' ws (fromIntegral wi')
+                                return $ loop rp' wi' fbuf' bufsize'
 
-         in bufLoop (B.length input * 2)
+        let bufsize0 = B.length input * 2
+        fbuf0 <- I.mallocByteString bufsize0
+        loop rs 0 fbuf0 bufsize0
 {-# INLINE runConvert #-}
 
 -- | Run a 'Write' for each byte in the input buffer, writing it to the output buffer.
