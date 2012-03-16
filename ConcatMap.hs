@@ -7,6 +7,7 @@ module ConcatMap (
 ) where
 
 import Control.Exception
+import Control.Monad
 import Data.ByteString      (ByteString)
 import Data.Monoid
 import Data.Typeable        (Typeable)
@@ -19,22 +20,20 @@ import System.IO.Unsafe     (unsafePerformIO)
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Unsafe as U
 
-newtype WB = WB { runWB :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO (Ptr Word8, Ptr Word8) }
+newtype WB = WB { runWB :: Ptr Word8 -> IO (Ptr Word8) }
 
 instance Monoid WB where
-    mempty = WB $ \_re rp wp -> return (rp, wp)
+    mempty = WB return
     {-# INLINE mempty #-}
 
-    a `mappend` b = WB $ \re rp wp -> do
-        (rp', wp') <- runWB a re rp wp
-        runWB b re rp' wp'
+    a `mappend` b = WB $ runWB a >=> runWB b
     {-# INLINE mappend #-}
 
 wb :: Word8 -> WB
-wb b = WB $ \_re rp wp -> do
+wb b = WB $ \wp -> do
     poke wp b
     let !wp' = wp `plusPtr` 1
-    return (rp, wp')
+    return wp'
 {-# INLINE wb #-}
 
 data GrowException = GrowException
@@ -48,13 +47,13 @@ type Convert = Ptr Word8
             -> IO (Ptr Word8, Ptr Word8)
 
 concatMapBuf :: (Word8 -> WB) -> Convert
-concatMapBuf f re rp0 wp0 =
+concatMapBuf f = \re rp0 wp0 ->
     let loop !rp !wp | rp >= re  = return (rp, wp)
                      | otherwise = do
             b <- peek rp
             let !rp1 = rp `plusPtr` 1
-            (rp', wp') <- runWB (f b) re rp1 wp
-            loop rp' wp'
+            wp' <- runWB (f b) wp
+            loop rp1 wp'
      in loop rp0 wp0
 {-# INLINE concatMapBuf #-}
 
