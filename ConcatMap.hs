@@ -34,10 +34,14 @@ instance Monoid WB where
     {-# INLINE mappend #-}
 
 wb :: Word8 -> WB
-wb b = WB $ \_we wp -> do
-    poke wp b
-    let !wp' = wp `plusPtr` 1
-    return $ Just wp'
+wb b = WB $ \we wp ->
+    if wp < we
+        then do
+            poke wp b
+            let !wp' = wp `plusPtr` 1
+            return $ Just wp'
+        else
+            return Nothing
 {-# INLINE wb #-}
 
 type Convert = Ptr Word8
