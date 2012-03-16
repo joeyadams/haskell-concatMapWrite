@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-module ConcatMap (
+module ConcatMapWrite (
     concatMapWrite
 ) where
 

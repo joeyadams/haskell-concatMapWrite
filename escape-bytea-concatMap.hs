@@ -1,4 +1,4 @@
-import ConcatMap
+import ConcatMapWrite
 
 import Blaze.ByteString.Builder
 import Data.Bits
