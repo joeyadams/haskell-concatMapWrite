@@ -45,13 +45,13 @@ instance Exception GrowException
 type Convert = Ptr Word8
             -> Ptr Word8
             -> Ptr Word8
-            -> IO (Ptr Word8)
+            -> IO (Ptr Word8, Ptr Word8)
 
 concatMapBuf :: (Word8 -> WB) -> Convert
 concatMapBuf f re rp0 wp0 =
         loop rp0 wp0
     where
-        loop !rp !wp | rp >= re  = return wp
+        loop !rp !wp | rp >= re  = return (rp, wp)
                      | otherwise = do
             b <- peek rp
             let !rp1 = rp `plusPtr` 1
@@ -73,7 +73,7 @@ runConvert conv input =
             bufLoop bufsize =
                 handle (\GrowException -> bufLoop (bufsize * 2)) $
                     allocaBytes bufsize $ \wp -> do
-                        wp' <- conv re rp0 wp
+                        (_, wp') <- conv re rp0 wp
                         B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
 
          in bufLoop (B.length input * 5)
