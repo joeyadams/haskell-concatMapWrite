@@ -41,11 +41,12 @@ data GrowException = GrowException
 
 instance Exception GrowException
 
-concatMapBuf :: (Word8 -> WB)
-             -> Ptr Word8
-             -> Ptr Word8
-             -> Ptr Word8
-             -> IO (Ptr Word8)
+type Convert = Ptr Word8
+            -> Ptr Word8
+            -> Ptr Word8
+            -> IO (Ptr Word8)
+
+concatMapBuf :: (Word8 -> WB) -> Convert
 concatMapBuf f re rp0 wp0 =
         loop rp0 wp0
     where
@@ -57,7 +58,11 @@ concatMapBuf f re rp0 wp0 =
 {-# INLINE concatMapBuf #-}
 
 concatMap' :: (Word8 -> WB) -> ByteString -> ByteString
-concatMap' f input =
+concatMap' = runConvert . concatMapBuf
+{-# INLINE concatMap' #-}
+
+runConvert :: Convert -> ByteString -> ByteString
+runConvert conv input =
     unsafePerformIO $
     U.unsafeUseAsCStringLen input $ \(rbuf, rlen) ->
         let !rp0 = castPtr rbuf
@@ -66,8 +71,8 @@ concatMap' f input =
             bufLoop bufsize =
                 handle (\GrowException -> bufLoop (bufsize * 2)) $
                     allocaBytes bufsize $ \wp -> do
-                        wp' <- concatMapBuf f re rp0 wp
+                        wp' <- conv re rp0 wp
                         B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
 
          in bufLoop (B.length input * 5)
-{-# INLINE concatMap' #-}
+{-# INLINE runConvert #-}
