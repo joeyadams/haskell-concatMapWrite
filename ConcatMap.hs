@@ -15,6 +15,7 @@ import Data.Word            (Word8)
 import Foreign.Marshal.Alloc    (allocaBytes)
 import Foreign.Ptr
 import Foreign.Storable
+import System.IO
 import System.IO.Unsafe     (unsafePerformIO)
 
 import qualified Data.ByteString        as B
@@ -78,8 +79,10 @@ runConvert conv input =
                 join $ allocaBytes bufsize $ \wp -> do
                     m <- conv re (wp `plusPtr` bufsize) rp0 wp
                     case m of
-                        Nothing  -> return $ bufLoop (bufsize * 2)
+                        Nothing  -> return $ do
+                            hPutStrLn stderr "Realloc"
+                            bufLoop (bufsize * 2)
                         Just wp' -> return $ B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
 
-         in bufLoop (B.length input * 5)
+         in bufLoop (B.length input * 2)
 {-# INLINE runConvert #-}
