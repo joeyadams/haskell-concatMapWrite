@@ -48,15 +48,14 @@ type Convert = Ptr Word8
             -> IO (Ptr Word8, Ptr Word8)
 
 concatMapBuf :: (Word8 -> WB) -> Convert
-concatMapBuf f re rp0 wp0 =
-        loop rp0 wp0
-    where
-        loop !rp !wp | rp >= re  = return (rp, wp)
+concatMapBuf f = \re rp0 wp0 ->
+    let loop !rp !wp | rp >= re  = return (rp, wp)
                      | otherwise = do
             b <- peek rp
             let !rp1 = rp `plusPtr` 1
             (rp', wp') <- runWB (f b) re rp1 wp
             loop rp' wp'
+     in loop rp0 wp0
 {-# INLINE concatMapBuf #-}
 
 concatMap' :: (Word8 -> WB) -> ByteString -> ByteString
