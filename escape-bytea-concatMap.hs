@@ -1,5 +1,6 @@
 import ConcatMap
 
+import Blaze.ByteString.Builder
 import Data.Bits
 import Data.ByteString          (ByteString)
 import Data.ByteString.Char8    ()
@@ -11,16 +12,16 @@ import qualified Data.ByteString.Lazy   as L
 escapeCopyBytea :: ByteString -> ByteString
 escapeCopyBytea = concatMap' f
     where
-        f c | c == c2w '\\' = wb 92
-                    `mappend` wb 92
-                    `mappend` wb 92
-                    `mappend` wb 92
-        f c | c >= 32 && c <= 126 = wb c
-        f c =             wb (c2w '\\')
-                `mappend` wb (c2w '\\')
-                `mappend` (wb $ c2w '0' + ((c `shiftR` 6) .&. 0x7))
-                `mappend` (wb $ c2w '0' + ((c `shiftR` 3) .&. 0x7))
-                `mappend` (wb $ c2w '0' + (c .&. 0x7))
+        f c | c == c2w '\\' = writeWord8 92
+                    `mappend` writeWord8 92
+                    `mappend` writeWord8 92
+                    `mappend` writeWord8 92
+        f c | c >= 32 && c <= 126 = writeWord8 c
+        f c =             writeWord8 (c2w '\\')
+                `mappend` writeWord8 (c2w '\\')
+                `mappend` (writeWord8 $ c2w '0' + ((c `shiftR` 6) .&. 0x7))
+                `mappend` (writeWord8 $ c2w '0' + ((c `shiftR` 3) .&. 0x7))
+                `mappend` (writeWord8 $ c2w '0' + (c .&. 0x7))
         {-# INLINE f #-}
 {-# INLINE escapeCopyBytea #-}
 
