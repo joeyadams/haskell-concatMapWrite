@@ -19,21 +19,22 @@ import System.IO.Unsafe     (unsafePerformIO)
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Unsafe as U
 
-newtype WB = WB { runWB :: Ptr Word8 -> IO (Ptr Word8) }
+newtype WB = WB { runWB :: Ptr Word8 -> Ptr Word8 -> IO (Ptr Word8, Ptr Word8) }
 
 instance Monoid WB where
-    mempty = WB return
+    mempty = WB $ \rp wp -> return (rp, wp)
     {-# INLINE mempty #-}
 
-    a `mappend` b = WB $ \p -> do
-        !p' <- runWB a p
-        runWB b p'
+    a `mappend` b = WB $ \rp wp -> do
+        (rp', wp') <- runWB a rp wp
+        runWB b rp' wp'
     {-# INLINE mappend #-}
 
 wb :: Word8 -> WB
-wb b = WB $ \p -> do
-    poke p b
-    return $! (p `plusPtr` 1)
+wb b = WB $ \rp wp -> do
+    poke wp b
+    let !wp' = wp `plusPtr` 1
+    return (rp, wp')
 {-# INLINE wb #-}
 
 data GrowException = GrowException
@@ -53,8 +54,9 @@ concatMapBuf f re rp0 wp0 =
         loop !rp !wp | rp >= re  = return wp
                      | otherwise = do
             b <- peek rp
-            wp' <- runWB (f b) wp
-            loop (rp `plusPtr` 1) wp'
+            let !rp1 = rp `plusPtr` 1
+            (rp', wp') <- runWB (f b) rp1 wp
+            loop rp' wp'
 {-# INLINE concatMapBuf #-}
 
 concatMap' :: (Word8 -> WB) -> ByteString -> ByteString
