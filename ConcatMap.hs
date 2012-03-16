@@ -20,40 +20,42 @@ import System.IO.Unsafe     (unsafePerformIO)
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Unsafe as U
 
-newtype WB = WB { runWB :: Ptr Word8 -> IO (Ptr Word8) }
+newtype WB = WB { runWB :: Ptr Word8 -> Ptr Word8 -> IO (Maybe (Ptr Word8)) }
 
 instance Monoid WB where
-    mempty = WB return
+    mempty = WB $ \_we wp -> return $ Just wp
     {-# INLINE mempty #-}
 
-    a `mappend` b = WB $ runWB a >=> runWB b
+    a `mappend` b = WB $ \we wp -> do
+        m <- runWB a we wp
+        case m of
+            Nothing  -> return Nothing
+            Just wp' -> runWB b we wp'
     {-# INLINE mappend #-}
 
 wb :: Word8 -> WB
-wb b = WB $ \wp -> do
+wb b = WB $ \_we wp -> do
     poke wp b
     let !wp' = wp `plusPtr` 1
-    return wp'
+    return $ Just wp'
 {-# INLINE wb #-}
-
-data GrowException = GrowException
-    deriving (Show, Typeable)
-
-instance Exception GrowException
 
 type Convert = Ptr Word8
             -> Ptr Word8
             -> Ptr Word8
-            -> IO (Ptr Word8, Ptr Word8)
+            -> Ptr Word8
+            -> IO (Maybe (Ptr Word8))
 
 concatMapBuf :: (Word8 -> WB) -> Convert
-concatMapBuf f = \re rp0 wp0 ->
-    let loop !rp !wp | rp >= re  = return (rp, wp)
+concatMapBuf f = \re we rp0 wp0 ->
+    let loop !rp !wp | rp >= re  = return $ Just wp
                      | otherwise = do
             b <- peek rp
             let !rp1 = rp `plusPtr` 1
-            wp' <- runWB (f b) wp
-            loop rp1 wp'
+            m <- runWB (f b) we wp
+            case m of
+                Nothing  -> return Nothing
+                Just wp' -> loop rp1 wp'
      in loop rp0 wp0
 {-# INLINE concatMapBuf #-}
 
@@ -69,10 +71,11 @@ runConvert conv input =
             !re  = rp0 `plusPtr` max 0 rlen
 
             bufLoop bufsize =
-                handle (\GrowException -> bufLoop (bufsize * 2)) $
-                    allocaBytes bufsize $ \wp -> do
-                        (_, wp') <- conv re rp0 wp
-                        B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
+                allocaBytes bufsize $ \wp -> do
+                    m <- conv re (wp `plusPtr` bufsize) rp0 wp
+                    case m of
+                        Nothing  -> error "runConvert"
+                        Just wp' -> B.packCStringLen (castPtr wp, wp' `minusPtr` wp)
 
          in bufLoop (B.length input * 5)
 {-# INLINE runConvert #-}
