@@ -10,7 +10,7 @@ import Data.Monoid
 import qualified Data.ByteString.Lazy   as L
 
 escapeCopyBytea :: ByteString -> ByteString
-escapeCopyBytea = concatMap' f
+escapeCopyBytea = concatMapWrite f
     where
         f c | c == c2w '\\' = writeWord8 92
                     `mappend` writeWord8 92
