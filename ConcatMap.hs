@@ -39,7 +39,8 @@ concatMapBuf f = \re we rp0 wp0 ->
 {-# INLINE concatMapBuf #-}
 
 concatMap' :: (Word8 -> Write) -> ByteString -> ByteString
-concatMap' = runConvert . concatMapBuf
+-- concatMap' = runConvert . concatMapBuf
+concatMap' f = toByteString . fromWriteList f . B.unpack
 {-# INLINE concatMap' #-}
 
 runConvert :: Convert -> ByteString -> ByteString
