@@ -1,12 +1,16 @@
-I'm trying to do reasonably fast character escaping in Haskell (that is, within a few factors of C).  Using [plain `ByteString` manipulation][1], my Haskell implementation is 125 times slower than my C implementation.  Then I tried to use [blaze-builder][2].  That was even slower.
+I'm trying to do reasonably fast character escaping in Haskell (that is, within a few factors of C).  Using [plain ByteString manipulation][1], my Haskell implementation is 125 times slower than my C implementation.  Then I tried to use [blaze-builder][2].  That was even slower.
 
-I eventually managed to get it to about 1.5 times slower than the C version (very good!).  However, it uses a lot of ugly buffer manipulation, and the performance boost is very sensitive to what gets inlined and what doesn't.
-
-The key function is this:
+I eventually managed to get it to about 1.5 times slower than the C version (very good!).  The key function is this:
 
     concatMapWrite :: (Word8 -> Write) -> ByteString -> ByteString
 
-It is like [concatMap from Data.ByteString][3].  However, instead of the callback returning a `ByteString`, it returns a [Write][4] object (defined in the [blaze-builder][5] package), which is used to write the data directly into a buffer.
+It is like [concatMap from Data.ByteString][3].  However, instead of the callback returning a [ByteString][6], it returns a [Write][4] which is used to write the data directly into a buffer.
+
+However, there are two problems:
+
+ * It uses a lot of ugly buffer manipulation,
+
+ * The performance boost is very sensitive to what gets inlined and what doesn't.
 
 Is there a better way to translate a sequence of bytes in Haskell than this?
 
@@ -19,3 +23,5 @@ Is there a better way to translate a sequence of bytes in Haskell than this?
  [4]: http://hackage.haskell.org/packages/archive/blaze-builder/latest/doc/html/Blaze-ByteString-Builder.html#t:Write
 
  [5]: http://hackage.haskell.org/package/blaze-builder
+
+ [6]: http://hackage.haskell.org/packages/archive/bytestring/latest/doc/html/Data-ByteString.html#t:ByteString
