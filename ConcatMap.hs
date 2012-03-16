@@ -19,19 +19,19 @@ import System.IO.Unsafe     (unsafePerformIO)
 import qualified Data.ByteString        as B
 import qualified Data.ByteString.Unsafe as U
 
-newtype WB = WB { runWB :: Ptr Word8 -> Ptr Word8 -> IO (Ptr Word8, Ptr Word8) }
+newtype WB = WB { runWB :: Ptr Word8 -> Ptr Word8 -> Ptr Word8 -> IO (Ptr Word8, Ptr Word8) }
 
 instance Monoid WB where
-    mempty = WB $ \rp wp -> return (rp, wp)
+    mempty = WB $ \_re rp wp -> return (rp, wp)
     {-# INLINE mempty #-}
 
-    a `mappend` b = WB $ \rp wp -> do
-        (rp', wp') <- runWB a rp wp
-        runWB b rp' wp'
+    a `mappend` b = WB $ \re rp wp -> do
+        (rp', wp') <- runWB a re rp wp
+        runWB b re rp' wp'
     {-# INLINE mappend #-}
 
 wb :: Word8 -> WB
-wb b = WB $ \rp wp -> do
+wb b = WB $ \_re rp wp -> do
     poke wp b
     let !wp' = wp `plusPtr` 1
     return (rp, wp')
@@ -55,7 +55,7 @@ concatMapBuf f re rp0 wp0 =
                      | otherwise = do
             b <- peek rp
             let !rp1 = rp `plusPtr` 1
-            (rp', wp') <- runWB (f b) rp1 wp
+            (rp', wp') <- runWB (f b) re rp1 wp
             loop rp' wp'
 {-# INLINE concatMapBuf #-}
 
